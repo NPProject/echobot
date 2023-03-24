@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.dispatcher.filters import Command
 from aiogram.types import ParseMode, BotCommand
-from aiogram.utils.exceptions import BotBlocked
+from aiogram.utils.exceptions import BotBlocked, UserDeactivated
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pydantic import BaseModel
 
@@ -208,6 +208,8 @@ async def send_msg(message: types.Message, user, reply_markup):
                                 sent_message.message_id, message.message_id)
     except BotBlocked:
         await db.users.delete_one(dict(user_id=user["user_id"]))
+    except UserDeactivated:
+        await db.users.delete_one(dict(user_id=user["user_id"]))
     except Exception as e:
         logging.exception(e)
 
@@ -241,6 +243,10 @@ async def edit_cor(message, sent_message, reply_markup):
                                     message_id=sent_message["receiver_message_id"],
                                     text=f"{message.text} (edited)",
                                     reply_markup=reply_markup)
+    except BotBlocked:
+        await db.users.delete_one(dict(user_id=sent_message["receiver_id"]))
+    except UserDeactivated:
+        await db.users.delete_one(dict(user_id=sent_message["receiver_id"]))
     except Exception as e:
         logging.exception(e)
 
