@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Union
 
 from aiogram import Bot, Dispatcher, types
@@ -289,6 +289,65 @@ async def delete_handler(message: types.Message):
                     logging.exception(e)
 
         await message.reply("Сообщение было удалено у всех пользователей.")
+
+
+@dp.message_handler(Command('ban'), is_reply=True)
+async def ban_handler(message: types.Message):
+    user_id: int = 0
+    if message.reply_to_message:
+        if message.reply_to_message.from_user.is_bot:
+            msgs = db.sent_messages.find(dict(sender_message_id=message.reply_to_message.message_id))
+        else:
+            msgs = db.sent_messages.find(dict(original_message_id=message.reply_to_message.message_id))
+        async for msg in msgs:
+            if not await is_admin(message.from_user.id):
+                await message.reply("У вас нет прав для блокировки пользователя.")
+                return
+
+            user_id = msg["sender_id"]
+
+            user = User(**(await db.users.find_one({"user_id": user_id})))
+            if user:
+                if user.vip:
+                    await save_user(User(user_id=user_id), vip=False)
+                if user.admin:
+                    await save_user(User(user_id=user_id), admin=False)
+
+                await db.cooldown.update_one({"user_id": user_id},
+                                             {"$set": {"sent_at": datetime.now() + timedelta(days=365)}},
+                                             upsert=True)
+
+        if user_id:
+            await message.reply("Пользователь был заблокирован!\nАйди: {}".format(user_id))
+        else:
+            await message.reply("Что-то пошло не так")
+
+
+@dp.message_handler(Command('unban'), is_reply=True)
+async def unban_handler(message: types.Message):
+    user_id: int = 0
+    if message.reply_to_message:
+        if message.reply_to_message.from_user.is_bot:
+            msgs = db.sent_messages.find(dict(sender_message_id=message.reply_to_message.message_id))
+        else:
+            msgs = db.sent_messages.find(dict(original_message_id=message.reply_to_message.message_id))
+        async for msg in msgs:
+            if not await is_admin(message.from_user.id):
+                await message.reply("У вас нет прав для разблокировки пользователя.")
+                return
+
+            user_id = msg["sender_id"]
+
+            user = User(**(await db.users.find_one({"user_id": user_id})))
+            if user:
+                await db.cooldown.update_one({"user_id": user_id},
+                                             {"$set": {"sent_at": datetime.now() - timedelta(seconds=60)}},
+                                             upsert=True)
+
+        if user_id:
+            await message.reply("Пользователь был разблокирован!\nАйди: {}".format(user_id))
+        else:
+            await message.reply("Что-то пошло не так")
 
 
 @dp.message_handler(content_types=[types.ContentType.ANY])
